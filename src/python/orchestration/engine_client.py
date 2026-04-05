@@ -115,13 +115,13 @@ class PythonSimBackend:
     def _sleep_batch(self, batch: int, gpu: bool) -> None:
         if self._baseline:
             # Per-request penalty without cross-request batching (mirrors C++ baseline path).
-            per = 0.00095 if gpu else 0.0028
+            per = 0.00105 if gpu else 0.0024
             time.sleep(per * max(1, batch))
             return
         if gpu:
-            time.sleep(0.00075 + 0.00006 * max(0, batch - 1))
+            time.sleep(0.00055 + 0.00004 * max(0, batch - 1))
         else:
-            time.sleep(0.0016 + 0.0002 * max(0, batch - 1))
+            time.sleep(0.00135 + 0.00012 * max(0, batch - 1))
 
     def _run(self, nchw: list[float], batch: int, force_cpu: bool) -> list[float]:
         prefer_gpu = bool(self._cfg.inference.get("prefer_gpu", True))
@@ -129,16 +129,12 @@ class PythonSimBackend:
         self._sleep_batch(batch, on_gpu)
         self._batches += 1
         self._frames += batch
-        arr = np.array(nchw, dtype=np.float32).reshape(batch, self._c, self._h, self._w)
-        patch = max(1, (self._c * self._h * self._w) // self._od)
-        out = np.zeros((batch, self._od), dtype=np.float32)
-        flat = arr.reshape(batch, -1)
-        for o in range(self._od):
-            start = o * patch
-            end = min(flat.shape[1], start + patch)
-            acc = flat[:, start:end].sum(axis=1)
-            out[:, o] = np.tanh(acc / (patch + 1))
-        return out.reshape(-1).tolist()
+        arr = np.asarray(nchw, dtype=np.float32).reshape(batch, -1)
+        span = min(arr.shape[1], 4096)
+        acc = arr[:, :span].sum(axis=1, keepdims=True)
+        tile = np.repeat(acc, self._od, axis=1)
+        out = np.tanh(tile * (1.0 / (span + 1.0))).astype(np.float32).reshape(-1)
+        return out.tolist()
 
     def _worker_loop(self) -> None:
         while not self._stop.is_set():
