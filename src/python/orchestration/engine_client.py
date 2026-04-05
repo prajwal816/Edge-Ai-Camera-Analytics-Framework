@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+import queue
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, Sequence
@@ -96,13 +98,30 @@ class PythonSimBackend:
         self._od = 64
         self._batches = 0
         self._frames = 0
+        self._submitted = 0
+        self._batch_events = 0
+        self._q: queue.Queue[tuple[list[float], int, int, int, bool, Future[list[float]]] | None] = queue.Queue()
+        self._stop = threading.Event()
+        self._threads: list[threading.Thread] = []
+        if not self._baseline:
+            n = max(1, int(cfg.inference.get("worker_threads", 4)))
+            self._max_batch = max(1, int(cfg.inference.get("max_batch_size", 8)))
+            self._max_wait_s = max(0.0005, float(cfg.inference.get("batch_timeout_ms", 4.0)) / 1000.0)
+            for i in range(n):
+                t = threading.Thread(target=self._worker_loop, name=f"py-sim-sched-{i}", daemon=True)
+                t.start()
+                self._threads.append(t)
 
     def _sleep_batch(self, batch: int, gpu: bool) -> None:
         if self._baseline:
-            us = (900 if gpu else 3500) * max(1, batch)
+            # Per-request penalty without cross-request batching (mirrors C++ baseline path).
+            per = 0.00095 if gpu else 0.0028
+            time.sleep(per * max(1, batch))
+            return
+        if gpu:
+            time.sleep(0.00075 + 0.00006 * max(0, batch - 1))
         else:
-            us = (220 + 40 * max(0, batch - 1)) if gpu else (1800 + 200 * max(0, batch - 1))
-        time.sleep(us / 1_000_000)
+            time.sleep(0.0016 + 0.0002 * max(0, batch - 1))
 
     def _run(self, nchw: list[float], batch: int, force_cpu: bool) -> list[float]:
         prefer_gpu = bool(self._cfg.inference.get("prefer_gpu", True))
@@ -111,7 +130,6 @@ class PythonSimBackend:
         self._batches += 1
         self._frames += batch
         arr = np.array(nchw, dtype=np.float32).reshape(batch, self._c, self._h, self._w)
-        # Match C++ reduction style loosely
         patch = max(1, (self._c * self._h * self._w) // self._od)
         out = np.zeros((batch, self._od), dtype=np.float32)
         flat = arr.reshape(batch, -1)
@@ -122,23 +140,77 @@ class PythonSimBackend:
             out[:, o] = np.tanh(acc / (patch + 1))
         return out.reshape(-1).tolist()
 
+    def _worker_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                first = self._q.get(timeout=0.05)
+            except queue.Empty:
+                continue
+            if first is None:
+                break
+            jobs: list[tuple[list[float], int, int, int, bool, Future[list[float]]]] = [first]
+            deadline = time.perf_counter() + self._max_wait_s
+            while len(jobs) < self._max_batch and time.perf_counter() < deadline:
+                try:
+                    nxt = self._q.get_nowait()
+                except queue.Empty:
+                    time.sleep(0.0002)
+                    continue
+                jobs.append(nxt)
+
+            self._batch_events += 1
+            batch = len(jobs)
+            any_cpu = any(j[4] for j in jobs)
+            concat: list[float] = []
+            ch = jobs[0][1]
+            h = jobs[0][2]
+            w = jobs[0][3]
+            for tensor, _, _, _, _, _ in jobs:
+                concat.extend(tensor)
+            flat = self._run(concat, batch, any_cpu)
+            od = self._od
+            for i, (_, _, _, _, _, fut) in enumerate(jobs):
+                if fut.cancelled():
+                    continue
+                off = i * od
+                fut.set_result(flat[off : off + od])
+
     def infer(self, tensor: list[float], channels: int, height: int, width: int, force_cpu: bool) -> list[float]:
         ch = channels or self._c
         h = height or self._h
         w = width or self._w
-        out = self._run(tensor, 1, force_cpu)
-        return out
+        if self._baseline:
+            return self._infer_direct(list(tensor), ch, h, w, force_cpu)
+        self._submitted += 1
+        fut: Future[list[float]] = Future()
+        self._q.put((list(tensor), ch, h, w, force_cpu, fut))
+        return fut.result(timeout=120.0)
+
+    def _infer_direct(self, tensor: list[float], ch: int, h: int, w: int, force_cpu: bool) -> list[float]:
+        return self._run(tensor, 1, force_cpu)
 
     def batch_infer(
         self, tensors: Sequence[list[float]], channels: int, height: int, width: int, force_cpu: bool
     ) -> list[list[float]]:
-        return [self.infer(list(t), channels, height, width, force_cpu) for t in tensors]
+        ch = channels or self._c
+        h = height or self._h
+        w = width or self._w
+        if self._baseline:
+            return [self._infer_direct(list(t), ch, h, w, force_cpu) for t in tensors]
+        if not tensors:
+            return []
+        concat: list[float] = []
+        for t in tensors:
+            concat.extend(t)
+        flat = self._run(concat, len(tensors), force_cpu)
+        od = self._od
+        return [flat[i * od : (i + 1) * od] for i in range(len(tensors))]
 
     def snapshot(self) -> dict[str, Any]:
         return {
             "gpu_log_line": "gpu_utilization_percent=42.0 gpu_mem_used_mb=900.0 (python sim)",
-            "scheduler_submitted": 0,
-            "scheduler_batches": 0,
+            "scheduler_submitted": self._submitted,
+            "scheduler_batches": self._batch_events,
             "engine_batches": self._batches,
             "engine_frames": self._frames,
             "engine_gpu_path": self._batches,
@@ -147,7 +219,12 @@ class PythonSimBackend:
         }
 
     def shutdown(self) -> None:
-        return
+        self._stop.set()
+        for _ in self._threads:
+            self._q.put(None)
+        for t in self._threads:
+            t.join(timeout=1.0)
+        self._threads.clear()
 
 
 class HttpBackend:
