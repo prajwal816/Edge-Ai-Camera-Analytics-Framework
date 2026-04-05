@@ -1,0 +1,35 @@
+services:
+  inference:
+    build: .
+    image: edge-ai-inference:latest
+    command: ["uvicorn", "orchestration.inference_service:app", "--host", "0.0.0.0", "--port", "9100"]
+    working_dir: /app/src/python
+    environment:
+      PYTHONPATH: /app/src/python
+      EDGE_SIMULATE_CAMERAS: "1"
+      EDGE_NATIVE_MODULE: ""
+    expose:
+      - "9100"
+    # For NVIDIA runtime on Linux hosts (optional):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  api:
+    build: .
+    image: edge-ai-inference:latest
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    working_dir: /app/src/python
+    environment:
+      PYTHONPATH: /app/src/python
+      EDGE_SIMULATE_CAMERAS: "1"
+      EDGE_INFERENCE_BACKEND: remote
+      EDGE_INFERENCE_REMOTE_URL: http://inference:9100
+    ports:
+      - "8000:8000"
+    depends_on:
+      - inference
