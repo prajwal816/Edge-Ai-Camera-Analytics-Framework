@@ -16,16 +16,16 @@ def load_edge_infer_native() -> ModuleType | None:
     if env_path:
         candidates.append(Path(env_path))
     root = repo_root()
-    candidates.extend(
-        [
-            root / "engine" / "edge_infer_native.so",
-            root / "engine" / "edge_infer_native.pyd",
-            root / "cmake-build-release" / "python_module" / "edge_infer_native.so",
-            root / "cmake-build-debug" / "python_module" / "edge_infer_native.pyd",
-            root / "build" / "python_module" / "edge_infer_native.so",
-            root / "build" / "python_module" / "edge_infer_native.pyd",
-        ]
-    )
+    for pattern in (
+        "engine/edge_infer_native*.so",
+        "engine/edge_infer_native*.pyd",
+        "build/python_module/edge_infer_native*.so",
+        "build/python_module/edge_infer_native*.pyd",
+        "cmake-build-release/python_module/edge_infer_native*.so",
+        "cmake-build-debug/python_module/edge_infer_native*.pyd",
+    ):
+        for p in sorted(root.glob(pattern)):
+            candidates.append(p)
     for p in candidates:
         if p.is_file():
             spec = importlib.util.spec_from_file_location("edge_infer_native", str(p))

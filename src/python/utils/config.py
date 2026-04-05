@@ -59,4 +59,19 @@ def load_config(path: str | None = None) -> AppConfig:
         with local.open("r", encoding="utf-8") as f:
             override = yaml.safe_load(f) or {}
         data = _deep_merge(data, override)
-    return AppConfig(raw=data)
+    cfg = AppConfig(raw=data)
+    _apply_env_overrides(cfg)
+    return cfg
+
+
+def _apply_env_overrides(cfg: AppConfig) -> None:
+    b = os.environ.get("EDGE_INFERENCE_BACKEND")
+    if b:
+        cfg.raw.setdefault("inference", {})["backend"] = b
+    r = os.environ.get("EDGE_INFERENCE_REMOTE_URL")
+    if r:
+        cfg.raw.setdefault("inference", {})["remote_url"] = r
+    if os.environ.get("EDGE_BASELINE_MODE", "").lower() in ("1", "true", "yes"):
+        cfg.raw.setdefault("inference", {})["baseline_mode"] = True
+    if os.environ.get("EDGE_OPTIMIZED_MODE", "").lower() in ("1", "true", "yes"):
+        cfg.raw.setdefault("inference", {})["baseline_mode"] = False
