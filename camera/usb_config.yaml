@@ -1,0 +1,7 @@
+usb_webcam:
+  device_index: 0
+  fourcc: "MJPG"
+  width: 640
+  height: 480
+  fps: 30
+  # When OpenCV cannot open the device, synthetic frames are used (see orchestration/camera_manager.py)

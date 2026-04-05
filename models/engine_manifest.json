@@ -1,0 +1,12 @@
+{
+  "name": "edge_demo_classifier",
+  "version": "1.0.0-sim",
+  "input_layout": "NCHW",
+  "input_channels": 3,
+  "input_height": 224,
+  "input_width": 224,
+  "output_dim": 64,
+  "precision": "fp16",
+  "tensorrt_engine_file": "placeholder.trt",
+  "notes": "Replace with a real TensorRT engine on Jetson. Simulation mode uses deterministic CPU/GPU-timed matmul."
+}

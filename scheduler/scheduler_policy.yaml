@@ -1,0 +1,19 @@
+# Scheduler policy — weights and thresholds (read at runtime; hot-reload optional)
+
+batching:
+  max_batch_size: 8
+  max_wait_ms: 4.0
+  priority_boost_csi: 1.15
+
+load_balance:
+  gpu_weight: 1.0
+  cpu_weight: 0.35
+  migrate_to_cpu_when_gpu_util_above: 0.92
+
+queues:
+  ingestion_high_water_mark: 256
+  inference_high_water_mark: 128
+
+retry:
+  max_attempts: 2
+  backoff_ms: 5

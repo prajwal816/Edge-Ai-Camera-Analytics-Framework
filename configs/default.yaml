@@ -1,0 +1,35 @@
+# Edge inference framework — global defaults (override with EDGE_CONFIG_PATH)
+
+service:
+  host: "0.0.0.0"
+  port: 8000
+  log_level: "INFO"
+
+inference:
+  # local | remote
+  backend: "local"
+  remote_url: "http://inference:9100"
+  engine_path: "models/engine_manifest.json"
+  max_batch_size: 8
+  batch_timeout_ms: 4.0
+  worker_threads: 4
+  baseline_mode: false
+  prefer_gpu: true
+  cpu_fallback_util_threshold: 0.92
+
+camera:
+  max_streams: 8
+  csi_sim_fps: 30
+  usb_default_device: 0
+  frame_height: 224
+  frame_width: 224
+  ring_buffer_size: 32
+
+metrics:
+  gpu_log_interval_sec: 2.0
+  simulated_gpu_cap_percent: 95
+
+benchmarks:
+  concurrent_requests: 220
+  warmup_requests: 20
+  duration_sec: 15
