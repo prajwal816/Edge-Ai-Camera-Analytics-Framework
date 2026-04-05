@@ -21,6 +21,9 @@ def load_edge_infer_native() -> ModuleType | None:
         "engine/edge_infer_native*.pyd",
         "build/python_module/edge_infer_native*.so",
         "build/python_module/edge_infer_native*.pyd",
+        "build/python_module/Debug/edge_infer_native*.pyd",
+        "build/python_module/Release/edge_infer_native*.pyd",
+        "build/python_module/*/edge_infer_native*.so",
         "cmake-build-release/python_module/edge_infer_native*.so",
         "cmake-build-debug/python_module/edge_infer_native*.pyd",
     ):
