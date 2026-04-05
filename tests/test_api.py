@@ -40,3 +40,11 @@ def test_batch_infer(client: TestClient) -> None:
     assert r.status_code == 200
     body = r.json()
     assert len(body["outputs"]) == 2
+
+
+def test_infer_latest(client: TestClient) -> None:
+    r = client.post("/infer_latest/csi-0")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["output"]) == 64
+    assert body["latency_ms"] >= 0
