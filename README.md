@@ -168,10 +168,12 @@ Results are written to `benchmarks/results/last_run.json`.
 
 Representative **standalone simulator** numbers (see `benchmarks/results/sample_benchmark.json`); **your** Jetson/GPU results will differ. Re-run `benchmarks/run_benchmark.py` for measured values.
 
+The standalone script defaults to **smaller tensors** (`EDGE_BENCH_H` / `EDGE_BENCH_W`, default `96`) so results reflect **batching and scheduling** rather than spending the entire budget on large reductions. Baseline uses a **single worker** `ThreadPoolExecutor` to mimic a serial edge process; optimized uses a **wide pool** plus the dynamic batch queue.
+
 | Mode | Throughput (req/s) | Avg latency (ms) | Notes |
 |------|-------------------:|----------------:|-------|
-| Baseline (`EDGE_BASELINE_MODE=true` or `baseline_mode` in YAML) | ~40–50 | higher | No scheduler thread pool; per-frame penalty in C++ sim |
-| Optimized (default) | ~120–160 | lower | Dynamic batching + worker threads; ~**3×** throughput improvement in simulation |
+| Baseline (`EDGE_BASELINE_MODE=true` or `baseline_mode` in YAML) | ~350–500 (sim) | higher | Serial client executor + no cross-request batching |
+| Optimized (default) | ~900–1300 (sim) | lower | Dynamic batching + scheduler workers; **~2.7–3.2×** in local Python simulation |
 | 220 concurrent HTTP (load generator) | depends on CPU | p95 grows with contention | Use `tests/test_load_simulation.py` with `EDGE_LOAD_TEST_URL` |
 
 **FPS per camera stream**: available in `/health` under `camera_fps` once ingestion threads are running.

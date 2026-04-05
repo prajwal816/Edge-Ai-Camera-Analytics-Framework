@@ -31,12 +31,16 @@ from orchestration.engine_client import EngineClient  # noqa: E402
 from utils.config import load_config  # noqa: E402
 
 
-def _tensor() -> list[float]:
-    return [0.03] * (3 * 224 * 224)
+def _tensor() -> tuple[list[float], int, int, int]:
+    """Smaller spatial size so the benchmark highlights batching/scheduling, not raw matmul time."""
+    h = int(os.environ.get("EDGE_BENCH_H", "96"))
+    w = int(os.environ.get("EDGE_BENCH_W", "96"))
+    c = 3
+    return [0.03] * (c * h * w), c, h, w
 
 
 async def _burst_http(base_url: str, concurrent: int, requests: int) -> dict[str, Any]:
-    tensor = _tensor()
+    tensor, c, h, w = _tensor()
     sem = asyncio.Semaphore(concurrent)
 
     async with httpx.AsyncClient(base_url=base_url, timeout=300.0) as client:
@@ -45,7 +49,7 @@ async def _burst_http(base_url: str, concurrent: int, requests: int) -> dict[str
         async def one() -> None:
             async with sem:
                 t0 = time.perf_counter()
-                r = await client.post("/infer", json={"tensor": tensor, "channels": 3, "height": 224, "width": 224})
+                r = await client.post("/infer", json={"tensor": tensor, "channels": c, "height": h, "width": w})
                 r.raise_for_status()
                 latencies.append((time.perf_counter() - t0) * 1000.0)
 
@@ -77,10 +81,10 @@ async def _standalone_pair() -> dict[str, Any]:
         # Baseline models a single worker edge device; optimized allows a wide client pool to stress batching.
         exec_workers = 1 if baseline else min(32, max(8, n // 4))
         c = EngineClient(cfg=cfg, executor=ThreadPoolExecutor(max_workers=exec_workers))
-        tensor = _tensor()
+        tensor, ch, h, w = _tensor()
 
         async def job() -> None:
-            await c.infer_async(tensor, 3, 224, 224, False)
+            await c.infer_async(tensor, ch, h, w, False)
 
         t0 = time.perf_counter()
         await asyncio.gather(*[job() for _ in range(n)])
