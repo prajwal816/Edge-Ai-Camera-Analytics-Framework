@@ -17,6 +17,7 @@ import os
 import statistics
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -72,10 +73,11 @@ async def _standalone_pair() -> dict[str, Any]:
     async def run_mode(baseline: bool) -> float:
         cfg.raw.setdefault("inference", {})
         cfg.raw["inference"]["baseline_mode"] = baseline
-        c = EngineClient(cfg=cfg)
-        tensor = _tensor()
         n = int(cfg.benchmarks.get("concurrent_requests", 120))
-        conc = min(64, n)
+        # Baseline models a single worker edge device; optimized allows a wide client pool to stress batching.
+        exec_workers = 1 if baseline else min(32, max(8, n // 4))
+        c = EngineClient(cfg=cfg, executor=ThreadPoolExecutor(max_workers=exec_workers))
+        tensor = _tensor()
 
         async def job() -> None:
             await c.infer_async(tensor, 3, 224, 224, False)

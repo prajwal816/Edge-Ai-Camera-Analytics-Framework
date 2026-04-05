@@ -146,13 +146,13 @@ class PythonSimBackend:
                 break
             jobs: list[tuple[list[float], int, int, int, bool, Future[list[float]]]] = [first]
             deadline = time.perf_counter() + self._max_wait_s
-            while len(jobs) < self._max_batch and time.perf_counter() < deadline:
+            while len(jobs) < self._max_batch:
                 try:
-                    nxt = self._q.get_nowait()
+                    jobs.append(self._q.get_nowait())
                 except queue.Empty:
-                    time.sleep(0.0002)
-                    continue
-                jobs.append(nxt)
+                    if time.perf_counter() >= deadline:
+                        break
+                    time.sleep(0.00002)
 
             self._batch_events += 1
             batch = len(jobs)
