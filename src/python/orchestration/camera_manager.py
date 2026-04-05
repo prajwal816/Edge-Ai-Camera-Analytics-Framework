@@ -87,7 +87,8 @@ class CameraManager:
 
     def _ingest_loop(self, stream: CameraStreamConfig, h: int, w: int, c: int) -> None:
         cap = None
-        if stream.kind == CameraKind.USB and os.environ.get("EDGE_SIMULATE_CAMERAS", "1") not in ("0", "false"):
+        simulate = os.environ.get("EDGE_SIMULATE_CAMERAS", "1").lower() in ("1", "true", "yes")
+        if stream.kind == CameraKind.USB and not simulate:
             cap = self._try_open_cv_capture(stream.device_index)
         target_fps = float(self.cfg.camera.get("csi_sim_fps", 30))
         frame_interval = 1.0 / max(1.0, target_fps)
