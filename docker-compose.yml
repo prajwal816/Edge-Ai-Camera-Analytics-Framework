@@ -7,7 +7,6 @@ services:
     environment:
       PYTHONPATH: /app/src/python
       EDGE_SIMULATE_CAMERAS: "1"
-      EDGE_NATIVE_MODULE: ""
     expose:
       - "9100"
     # For NVIDIA runtime on Linux hosts (optional):

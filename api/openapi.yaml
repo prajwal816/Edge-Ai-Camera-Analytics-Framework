@@ -1,0 +1,51 @@
+openapi: 3.1.0
+info:
+  title: Edge AI Camera Analytics API
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      summary: Liveness and engine telemetry
+      responses:
+        "200":
+          description: OK
+  /infer:
+    post:
+      summary: Single NCHW inference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tensor]
+              properties:
+                tensor:
+                  type: array
+                  items: { type: number }
+                channels: { type: integer, default: 0 }
+                height: { type: integer, default: 0 }
+                width: { type: integer, default: 0 }
+                force_cpu: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Inference result
+  /batch_infer:
+    post:
+      summary: Multiple independent tensors (scheduler batches internally when optimized)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tensors]
+              properties:
+                tensors:
+                  type: array
+                  items:
+                    type: array
+                    items: { type: number }
+      responses:
+        "200":
+          description: Batch outputs
