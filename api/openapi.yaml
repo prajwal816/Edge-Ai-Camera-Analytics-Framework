@@ -49,3 +49,17 @@ paths:
       responses:
         "200":
           description: Batch outputs
+  /infer_latest/{stream_id}:
+    post:
+      summary: Run inference on the latest frame from a camera stream
+      parameters:
+        - name: stream_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: force_cpu
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Same shape as /infer

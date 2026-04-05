@@ -23,9 +23,11 @@ void EdgeInferenceService::configure(const std::string& manifest_path, bool base
   pre_.configure(man.input_c, man.input_h, man.input_w);
 
   sched_.reset();
+  std::size_t effective_max_batch = 1;
   if (!baseline_mode) {
     SchedulerConfig sc;
     sc.max_batch = std::max<std::size_t>(1, max_batch);
+    effective_max_batch = sc.max_batch;
     sc.max_wait_ms = max_wait_ms;
     sc.cpu_fallback_util_threshold = cpu_fallback_util_threshold;
     sc.worker_threads = std::max(1, worker_threads);
@@ -34,7 +36,7 @@ void EdgeInferenceService::configure(const std::string& manifest_path, bool base
   }
   started_ = true;
   log_info("edge_service", "configured baseline=" + std::string(baseline_mode ? "true" : "false") +
-                               " max_batch=" + std::to_string(sc.max_batch));
+                               " max_batch=" + std::to_string(effective_max_batch));
 }
 
 void EdgeInferenceService::shutdown() {
